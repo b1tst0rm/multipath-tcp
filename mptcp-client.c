@@ -17,7 +17,7 @@ int main (int argc, char const *argv[])
         char base_data[] = "0123456789"
                            "abcdefghijklmnopqrstuvwxyz"
                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        int ctl_fd, enable, ctl_retval; // FD = file descriptor, return type of socket()
+        int ctl_fd, enable, ctl_retval;
         struct sockaddr_in serv_addr;
         char buffer[1024] = {0};
         char message[] = "Test temporary message.";

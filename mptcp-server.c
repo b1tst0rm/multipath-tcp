@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <string.h>
-//#include <sys/sysinfo.h>
 
 
 #define CTL_PORT 50000

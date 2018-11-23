@@ -20,10 +20,6 @@
 #define SERV_IP "127.0.0.1"
 
 
-int port_index = 0; // global variable
-
-int subflow_index = 0;
-
 // FUNCTION PROTOTYPES
 int create_subflow(int port);
 void subflow(int read_pipe[2], int write_pipe[2]);
@@ -34,19 +30,15 @@ int main (int argc, char const *argv[])
         char base_data[] = "0123456789"
                            "abcdefghijklmnopqrstuvwxyz"
                            "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        int ctl_fd, ctl_retval, i, child_pid;
+        int ctl_fd, ctl_retval, i;
         char buffer[1024] = {0};
         char message[] = "Test temporary message.";
-        char serv_ip_addr[] = "127.0.0.1";
-        unsigned short sf_ports[3] = {DATA_PORT_1, DATA_PORT_2, DATA_PORT_3};
         int parent_pipe[2]; // Parent writes, child reads 
         int child_pipe[2]; // Child writes, parent reads 
 
         ctl_fd = create_subflow(CTL_PORT);
-
         send(ctl_fd, message, strlen(message), 0);
         ctl_retval = read(ctl_fd, buffer, 1024);
-
         printf("Response from server: %s\n", buffer);
 
         // Create pipes for process-to-process communication
@@ -74,6 +66,7 @@ int main (int argc, char const *argv[])
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
+                // parent process
                 char resp1, resp2, resp3;
                 close(parent_pipe[0]); // close input to write
                 close(child_pipe[1]); // close input to write
@@ -84,6 +77,7 @@ int main (int argc, char const *argv[])
                 read(child_pipe[0], &resp2, sizeof(char));
                 read(child_pipe[0], &resp3, sizeof(char));
                 printf("Responses: %c %c %c\n", resp1, resp2, resp3);
+
                 int wpid, status=0;
                 // Wait until all child processes finish executing
                 while ((wpid = wait(&status)) > 0) {}
@@ -95,7 +89,8 @@ int main (int argc, char const *argv[])
 }
 
 
-int create_subflow(int port) {
+int create_subflow(int port)
+{
         int sf_fd, enable, sf_retval, i;
         struct sockaddr_in serv_addr;
         char buffer[1024] = {0};
@@ -137,7 +132,8 @@ int create_subflow(int port) {
 
 
 // Child processes call this to execute MP subflow code
-void subflow(int read_pipe[2], int write_pipe[2]) {
+void subflow(int read_pipe[2], int write_pipe[2])
+{
         int serv_fd = 0;
         // First the subflow will read in it's socket file descriptor
         close(read_pipe[1]); // close the write end of the read pipe
@@ -148,5 +144,6 @@ void subflow(int read_pipe[2], int write_pipe[2]) {
         close(write_pipe[0]);
         write(write_pipe[1], &yes, sizeof(char));
         printf("child %d got %d\n", getpid(), serv_fd);
+
         return;
 }

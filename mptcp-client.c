@@ -26,7 +26,7 @@ int subflow_index = 0;
 
 // FUNCTION PROTOTYPES
 int create_subflow(int port);
-void subflow(int pipe_fd[2], int sf_fd);
+void subflow(int read_pipe[2], int write_pipe[2]);
 
 
 int main (int argc, char const *argv[])
@@ -39,7 +39,8 @@ int main (int argc, char const *argv[])
         char message[] = "Test temporary message.";
         char serv_ip_addr[] = "127.0.0.1";
         unsigned short sf_ports[3] = {DATA_PORT_1, DATA_PORT_2, DATA_PORT_3};
-        int pipe_fd[2]; // Array of file descriptors for pipe 
+        int parent_pipe[2]; // Parent writes, child reads 
+        int child_pipe[2]; // Child writes, parent reads 
 
         ctl_fd = create_subflow(CTL_PORT);
 
@@ -48,12 +49,17 @@ int main (int argc, char const *argv[])
 
         printf("Response from server: %s\n", buffer);
 
-        // Create pipe for process-to-process communication
-        if (pipe(pipe_fd) < 0) {
-                perror("pipe");
+        // Create pipes for process-to-process communication
+        if (pipe(parent_pipe) < 0) {
+                perror("parent pipe");
                 exit(EXIT_FAILURE);
         }
 
+        if (pipe(child_pipe) < 0) {
+                perror("xhild pipe");
+                exit(EXIT_FAILURE);
+        }
+        
         int sf_fd1 = 1;//create_subflow(DATA_PORT_1);
         int sf_fd2 = 2;//create_subflow(DATA_PORT_2);
         int sf_fd3 = 3;//create_subflow(DATA_PORT_3);
@@ -63,22 +69,21 @@ int main (int argc, char const *argv[])
         int fork2 = fork();
         if (fork1 == 0 || fork2 == 0) {
                 // child process
-                subflow_index++;
-                if (subflow_index == 1) {
-                        subflow(pipe_fd, sf_fd1);
-                } else if (subflow_index == 2) {
-                        subflow(pipe_fd, sf_fd2);
-                } else {
-                        subflow(pipe_fd, sf_fd3); 
-                }
+                subflow(parent_pipe, child_pipe);
         } else if (fork1 < 0 || fork2 < 0) {
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
-                close(pipe_fd[0]); // close input to write
-                write(pipe_fd[1], "one1", 4);
-                write(pipe_fd[1], "two2", 4);
-                write(pipe_fd[1], "thr3", 4);
+                char resp1, resp2, resp3;
+                close(parent_pipe[0]); // close input to write
+                close(child_pipe[1]); // close input to write
+                write(parent_pipe[1], &sf_fd1, sizeof(int));
+                write(parent_pipe[1], &sf_fd2, sizeof(int));
+                write(parent_pipe[1], &sf_fd3, sizeof(int));
+                read(child_pipe[0], &resp1, sizeof(char));
+                read(child_pipe[0], &resp2, sizeof(char));
+                read(child_pipe[0], &resp3, sizeof(char));
+                printf("Responses: %c %c %c\n", resp1, resp2, resp3);
                 int wpid, status=0;
                 // Wait until all child processes finish executing
                 while ((wpid = wait(&status)) > 0) {}
@@ -96,7 +101,7 @@ int create_subflow(int port) {
         char buffer[1024] = {0};
         char serv_ip_addr[] = SERV_IP;
 
-        // Set up the control flow socket
+        // Set up the socket
         if ((sf_fd = socket(AF_INET, SOCK_STREAM /* TCP */, 0 /* IP proto */)) < 0) {
                 perror("socket");
                 exit(EXIT_FAILURE);
@@ -120,27 +125,28 @@ int create_subflow(int port) {
                 exit(EXIT_FAILURE);
         }
 
+        // Connect to the server application
         if (connect(sf_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
                 perror("connect");
                 exit(EXIT_FAILURE);
         }
 
-        return sf_fd; // returns the file descriptor of a connected socket 
+        // Return the file descriptor of connected socket 
+        return sf_fd;
 }
 
 
 // Child processes call this to execute MP subflow code
-void subflow(int pipe_fd[2], int sf_fd) {
-        printf("in subflow as child %d\n", getpid());
-        printf("sf_fd = %d", sf_fd);
-        fflush(stdout);
-        close(pipe_fd[1]);
-        char buf[4];
-        read(pipe_fd[0], buf, 4);
-        printf("%s\n", buf);
+void subflow(int read_pipe[2], int write_pipe[2]) {
+        int serv_fd = 0;
+        // First the subflow will read in it's socket file descriptor
+        close(read_pipe[1]); // close the write end of the read pipe
+        read(read_pipe[0], &serv_fd, sizeof(int));
 
-//
-//        send(sf_fd, message, strlen(message), 0);
-//        
-//        close(sf_fd); // End control connection to server
+        // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
+        char yes = 'Y';
+        close(write_pipe[0]);
+        write(write_pipe[1], &yes, sizeof(char));
+        printf("child %d got %d\n", getpid(), serv_fd);
+        return;
 }

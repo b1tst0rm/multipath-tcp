@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <netinet/in.h>
 #include <string.h>
-
+#include <wait.h>
 
 #define CTL_PORT 50000
 #define SF1_PORT 50001
@@ -14,11 +14,12 @@
 
 // Function prototypes
 int setup_socket(int port);
-
+void subflow(int read_pipe[2], int write_pipe[2]);
 
 int main(int argc, char const *argv[])
 {
-        int ctl_fd, new_socket, valread, enable, sf1_fd, sf2_fd, sf3_fd;
+        int ctl_fd, new_socket, valread, enable, 
+            sf1_fd, sf2_fd, sf3_fd, fork1, fork2;
         struct sockaddr_in address;
         int addrlen = sizeof(address);
         char *message = "hi";
@@ -29,22 +30,37 @@ int main(int argc, char const *argv[])
         sf2_fd = setup_socket(SF2_PORT);
         sf3_fd = setup_socket(SF3_PORT);
 
-        printf("Server control port running on %d.\n"
-               "Subflows running on ports: 1) %d\n"
-               "                           2) %d\n"
-               "                           3) %d\n"
-               "Ready for connections.\n", CTL_PORT, SF1_PORT, SF2_PORT, SF3_PORT);
+        // fork subflow listeners
+        fork1 = fork();
+        fork2 = fork();
+        if (fork1 == 0 || fork2 == 0) {
+                // Child processes here
+                //subflow(parent_pipe, child_pipe);
+        } else if (fork1 < 0 || fork2 < 0) {
+                perror("fork");
+                exit(EXIT_FAILURE);
+        } else {
+                // Parent process here
+                printf("Server control port running on %d.\n"
+                       "Subflows running on ports: 1) %d\n"
+                       "                           2) %d\n"
+                       "                           3) %d\n"
+                       "Ready for connections.\n", CTL_PORT, SF1_PORT, SF2_PORT,
+                       SF3_PORT);
 
-        // Run the server forever
-        while(1) {
-                // Gets the next connection
-                if ((new_socket = accept(ctl_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+                // TODO: assumption was made that server did not have to run forever
+                // Gets data connection
+                if ((new_socket = accept(ctl_fd, (struct sockaddr *)
+                    &address, (socklen_t*)&addrlen)) < 0) {
                         perror("accept");
+                        exit(EXIT_FAILURE);
                 }
                 valread = read(new_socket, buffer, sizeof(buffer));
-                printf("Request received (%s)\n", buffer);
-                send(new_socket, message, strlen(message), 0);
-                printf("Response sent.\n");
+                printf("Client control connection established (%s)\n", buffer);
+                int wpid, status=0;
+                while ((wpid = wait(&status)) > 0) {}
+                printf("Ending server\n");
+                close(ctl_fd);
         }
 }
 
@@ -84,4 +100,18 @@ int setup_socket(int port)
 
         // Return the file descriptor of the newly-made socket
         return sock_fd;
+}
+
+
+void subflow(int read_pipe[2], int write_pipe[2]) {
+        int sf_fd = 0;
+        close(read_pipe[1]);
+        close(write_pipe[0]);
+
+        // Get the subflow connection socket file descriptor
+        read(read_pipe[0], &sf_fd, sizeof(int));
+
+        // Do connection stuff
+
+        return;
 }

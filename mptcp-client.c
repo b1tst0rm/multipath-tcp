@@ -52,10 +52,9 @@ int main (int argc, char const *argv[])
                 exit(EXIT_FAILURE);
         }
         
-        int sf_fd1 = 1;//create_subflow(DATA_PORT_1);
-        int sf_fd2 = 2;//create_subflow(DATA_PORT_2);
-        int sf_fd3 = 3;//create_subflow(DATA_PORT_3);
-
+        int sf_fd1 = create_subflow(DATA_PORT_1);
+        int sf_fd2 = create_subflow(DATA_PORT_2);
+        int sf_fd3 = create_subflow(DATA_PORT_3);
 
         int fork1 = fork();
         int fork2 = fork();
@@ -69,7 +68,7 @@ int main (int argc, char const *argv[])
                 // parent process
                 char resp1, resp2, resp3;
                 close(parent_pipe[0]); // close input to write
-                close(child_pipe[1]); // close input to write
+                close(child_pipe[1]); // close output to read
                 write(parent_pipe[1], &sf_fd1, sizeof(int));
                 write(parent_pipe[1], &sf_fd2, sizeof(int));
                 write(parent_pipe[1], &sf_fd3, sizeof(int));
@@ -81,7 +80,7 @@ int main (int argc, char const *argv[])
                 int wpid, status=0;
                 // Wait until all child processes finish executing
                 while ((wpid = wait(&status)) > 0) {}
-                printf("Ending program\n"); 
+                printf("Ending client\n"); 
                 close(ctl_fd); // End control connection to server
         }
     

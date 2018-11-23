@@ -24,6 +24,18 @@ int main(int argc, char const *argv[])
         int addrlen = sizeof(address);
         char *message = "hi";
         char buffer[64] = {0};
+        int parent_pipe[2], child_pipe[2];
+        
+        // Create pipes for process-to-process communication
+        if (pipe(parent_pipe) < 0) {
+                perror("parent pipe");
+                exit(EXIT_FAILURE);
+        }
+
+        if (pipe(child_pipe) < 0) {
+                perror("child pipe");
+                exit(EXIT_FAILURE);
+        }
  
         ctl_fd = setup_socket(CTL_PORT);
         sf1_fd = setup_socket(SF1_PORT);
@@ -35,11 +47,23 @@ int main(int argc, char const *argv[])
         fork2 = fork();
         if (fork1 == 0 || fork2 == 0) {
                 // Child processes here
-                //subflow(parent_pipe, child_pipe);
+                subflow(parent_pipe, child_pipe);
         } else if (fork1 < 0 || fork2 < 0) {
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
+                char resp1, resp2, resp3;
+                close(parent_pipe[0]); // close input to write
+                close(child_pipe[1]); // close output to read
+                write(parent_pipe[1], &sf1_fd, sizeof(int));
+                write(parent_pipe[1], &sf2_fd, sizeof(int));
+                write(parent_pipe[1], &sf3_fd, sizeof(int));
+                read(child_pipe[0], &resp1, sizeof(char));
+                read(child_pipe[0], &resp2, sizeof(char));
+                read(child_pipe[0], &resp3, sizeof(char));
+                printf("Responses: %c %c %c\n", resp1, resp2, resp3);
+
+
                 // Parent process here
                 printf("Server control port running on %d.\n"
                        "Subflows running on ports: 1) %d\n"
@@ -111,7 +135,10 @@ void subflow(int read_pipe[2], int write_pipe[2]) {
         // Get the subflow connection socket file descriptor
         read(read_pipe[0], &sf_fd, sizeof(int));
 
-        // Do connection stuff
+        // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
+        char yes = 'Y';
+        write(write_pipe[1], &yes, sizeof(char));
+        printf("child %d got %d\n", getpid(), sf_fd);
 
         return;
 }

@@ -48,7 +48,7 @@ int main (int argc, char const *argv[])
         }
 
         if (pipe(child_pipe) < 0) {
-                perror("xhild pipe");
+                perror("child pipe");
                 exit(EXIT_FAILURE);
         }
         

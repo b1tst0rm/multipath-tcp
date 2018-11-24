@@ -28,23 +28,9 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2]);
 
 int main (int argc, char const *argv[])
 {
-        // TODO: make not so ugly
-        char base_data[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        char base_data[62] = "0123456789"
+                           "abcdefghijklmnopqrstuvwxyz"
+                           "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
         int ctl_fd, ctl_retval, i;
         char buffer[1024] = {0};
         int init_pipe[2]; // Parent writes, child reads...only used to administer child IDs
@@ -83,33 +69,22 @@ int main (int argc, char const *argv[])
                 char resp1, resp2, resp3;
                 close(init_pipe[0]); // close input to write
                 for (i = 0; i < 3; i++) {
-                        close(child_pipes[i][1]); // close write end
-                        close(parent_pipes[i][0]); // close read end
+                        close(child_pipes[i][0]); // close input to write
+                        close(parent_pipes[i][1]); // close output to read
                 }
                 
                 // Write child IDs to shared pipe
                 unsigned short ids[3] = {0, 1, 2};
-                for (i = 0; i < 3; i++) {
-                        if (write(init_pipe[1], &ids[i], sizeof(unsigned short)) < 0) {
-                                perror("can't write to init");
-                                exit(EXIT_FAILURE);
-                        }
-                }
+                write(init_pipe[1], &ids[0], sizeof(unsigned short));
+                write(init_pipe[1], &ids[1], sizeof(unsigned short));
+                write(init_pipe[1], &ids[2], sizeof(unsigned short));
+
                 close(init_pipe[1]); // close pipe as no longer used
 
                 // Write connection FDs to private pipes
-                if (write(parent_pipes[0][1], &sf_fd1, sizeof(int)) < 0) {
-                        perror("can't write sf to child 0");
-                        exit(EXIT_FAILURE);
-                }
-                if (write(parent_pipes[1][1], &sf_fd2, sizeof(int)) < 0) {
-                        perror("can't write sf to child 1");
-                        exit(EXIT_FAILURE);
-                }
-                if (write(parent_pipes[2][1], &sf_fd3, sizeof(int)) < 0) {
-                        perror("can't write sf to child 2");
-                        exit(EXIT_FAILURE);
-                }
+                write(parent_pipes[0][1], &sf_fd1, sizeof(int));
+                write(parent_pipes[1][1], &sf_fd2, sizeof(int));
+                write(parent_pipes[2][1], &sf_fd3, sizeof(int));
 
                 // Get child process ACKs
                 read(child_pipes[0][0], &resp1, sizeof(char));
@@ -117,18 +92,18 @@ int main (int argc, char const *argv[])
                 read(child_pipes[2][0], &resp3, sizeof(char));
                 printf("Responses: %c %c %c\n", resp1, resp2, resp3);
 
+                // Build the entire 992-byte payload
+                char total_msg[992];
+                for (i = 0; i < 16; i++) {
+                        strncat(total_msg, base_data, 62);
+                }
+
                 // Write message to the children round-robin style
                 int child_index = 0;
-                unsigned short num = 0; // represents the DSS (overarching sequence num of transmission
+                unsigned short num = 0; // represents the DSS (overarching sequence number of transmission
                 char msg[ROUND_ROBIN_SIZE];
-                for (i = 0; i < 988; i = i + 4) {
-                        //strncpy(msg, &total_msg[i], ROUND_ROBIN_SIZE);
-                        msg[0] = base_data[i];
-                        msg[1] = base_data[i+1];
-                        msg[2] = base_data[i+2];
-                        msg[3] = base_data[i+3];
- 
-                        printf("Parent sending %d to ctl and %c%c%c%c to child\n", num, msg[0], msg[1], msg[2],msg[3]);
+                for (i = 0; i < 992; i = i + 4) {
+                        strncpy(msg, (total_msg + i), ROUND_ROBIN_SIZE);
                         // Parent writes the sequence number followed by the ROUND_ROBIN_SIZE message
                         // - the child ACKs by returning the sequence number...if sequence number
                         // is wrong, then the parent throws an error and exits
@@ -167,6 +142,7 @@ int main (int argc, char const *argv[])
                 write(parent_pipes[1][1], &stop, ROUND_ROBIN_SIZE);
                 write(parent_pipes[2][1], &stop, ROUND_ROBIN_SIZE);
 
+ 
                 int wpid, status=0;
                 // Wait until all child processes finish executing
                 while ((wpid = wait(&status)) > 0) {}
@@ -238,20 +214,15 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
 
         // First the subflow will read in its ID
         close(init_pipe[1]); // close the write end of the read pipe
-        if (read(init_pipe[0], &child_id, sizeof(unsigned short)) < 0) {
-                perror("can't get child_id");
-                exit(EXIT_FAILURE);
-        }
+        read(init_pipe[0], &child_id, sizeof(unsigned short));
         close(init_pipe[0]); // close out the init pipe as subflow will no longer use it
        
+        printf("Child got id %d\n", (int)child_id);
         // Next, subflow accesses its private pipe and gets its socket descriptor
         close(read_pipes[child_id][1]); // close the write end of the read pipe
-        if (read(read_pipes[child_id][0], &serv_fd, sizeof(int)) < 0) {
-                perror("can't get serv_fd");
-                exit(EXIT_FAILURE);
-        }
+        read(read_pipes[child_id][0], &serv_fd, sizeof(int));
         
-        // acknowledge receipt of socket fd by writing y to pipe (y = yes)
+        // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
         close(write_pipes[child_id][0]);
         if (write(write_pipes[child_id][1], &yes, sizeof(char)) < 0) {
                 perror("cannot write to parent");
@@ -264,7 +235,6 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
         while (strcmp(msg_to_send, "STOP") != 0) {
                 read(read_pipes[child_id][0], &seq_num, sizeof(seq_num)); // fetch sequence num
                 read(read_pipes[child_id][0], &msg_to_send, ROUND_ROBIN_SIZE); // fetch message
-                printf("Child %d is sending message: %s\n", (int)child_id, msg_to_send);
                 sent = send(serv_fd, msg_to_send, sizeof(msg_to_send), 0); // send message to server
                 if (sent != -1) {
                         send(write_pipes[child_id][1], &seq_num, sizeof(seq_num), 0); // return the sequence number to parent

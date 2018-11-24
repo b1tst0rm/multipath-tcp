@@ -10,7 +10,7 @@
 #define SF1_PORT 50001
 #define SF2_PORT 50002
 #define SF3_PORT 50003
-
+#define MESSAGE_SIZE 4 /* The client's "round robin size" */
 
 // Function prototypes
 int setup_socket(int port);
@@ -21,8 +21,9 @@ int main(int argc, char const *argv[])
 {
         int ctl_fd, new_socket, valread, enable, 
             sf1_fd, sf2_fd, sf3_fd, fork1, fork2;
-        char buffer[64] = {0};
+        unsigned short seq_num = 0;
         int parent_pipe[2], child_pipe[2];
+        char buffer[MESSAGE_SIZE] = {0};
         
         // Create pipes for process-to-process communication
         if (pipe(parent_pipe) < 0) {
@@ -75,8 +76,24 @@ int main(int argc, char const *argv[])
                 
                 // TODO: assumption was made that server did not have to run forever
                 // Gets data connection
-                valread = read(ctl_fd, buffer, sizeof(buffer));
-                printf("Client control connection established (%s)\n", buffer);
+                
+                while (strcmp(buffer, "STOP") != 0) {
+                        // Get the sequence number from control port
+                        if (read(ctl_fd, &seq_num, sizeof(seq_num)) < 0) {
+                                perror("couldn't read sequence num");
+                                exit(EXIT_FAILURE);
+                        }
+                    
+                        // Get the data from the childrens' pipe
+                        if (read(child_pipe[0], buffer, sizeof(buffer)) < 0) {
+                                perror("couldn't read sequence num");
+                                exit(EXIT_FAILURE);
+                        }
+
+                        printf("Parent got SEQNUM %d MSG %s\n", seq_num, buffer);
+                }
+                
+                /* Wait for children to exit before exiting server application */
                 int wpid, status=0;
                 while ((wpid = wait(&status)) > 0) {}
                 printf("Ending server\n");
@@ -136,7 +153,7 @@ void subflow(int read_pipe[2], int write_pipe[2]) {
         close(read_pipe[1]);
         close(write_pipe[0]);
 
-        char buffer[4];
+        char buffer[MESSAGE_SIZE];
 
         // Get the subflow connection socket file descriptor
         read(read_pipe[0], &sf_fd, sizeof(int));
@@ -144,11 +161,15 @@ void subflow(int read_pipe[2], int write_pipe[2]) {
         // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
         char yes = 'Y';
         write(write_pipe[1], &yes, sizeof(char));
-        
-        int valread = read(sf_fd, buffer, sizeof(buffer));
-
-        printf("child got %s\n", buffer);
+      
+        while (strcmp(buffer, "STOP") != 0) {
+                // Child reads from the TCP socket and writes to the pipe 
+                int valread = read(sf_fd, buffer, sizeof(buffer));
+                write(write_pipe[1], buffer, sizeof(buffer));
+        }
 
         close(sf_fd);
+        close(read_pipe[0]);
+        close(write_pipe[1]);
         return;
 }

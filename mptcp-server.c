@@ -16,13 +16,11 @@
 int setup_socket(int port);
 void subflow(int read_pipe[2], int write_pipe[2]);
 
+
 int main(int argc, char const *argv[])
 {
         int ctl_fd, new_socket, valread, enable, 
             sf1_fd, sf2_fd, sf3_fd, fork1, fork2;
-        struct sockaddr_in address;
-        int addrlen = sizeof(address);
-        char *message = "hi";
         char buffer[64] = {0};
         int parent_pipe[2], child_pipe[2];
         
@@ -36,13 +34,22 @@ int main(int argc, char const *argv[])
                 perror("child pipe");
                 exit(EXIT_FAILURE);
         }
+        
+        printf("Server control port running on %d.\n"
+               "Subflows running on ports: 1) %d\n"
+               "                           2) %d\n"
+               "                           3) %d\n"
+               "Ready for connections.\n", CTL_PORT, SF1_PORT, SF2_PORT,
+               SF3_PORT);
  
         ctl_fd = setup_socket(CTL_PORT);
         sf1_fd = setup_socket(SF1_PORT);
         sf2_fd = setup_socket(SF2_PORT);
         sf3_fd = setup_socket(SF3_PORT);
+        
+        printf("All 4 connections made successfully from client.\n");
 
-        // fork subflow listeners
+        // Fork subflow listeners
         fork1 = fork();
         fork2 = fork();
         if (fork1 == 0 || fork2 == 0) {
@@ -52,34 +59,23 @@ int main(int argc, char const *argv[])
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
-                char resp1, resp2, resp3;
+                char resp[3];
                 close(parent_pipe[0]); // close input to write
                 close(child_pipe[1]); // close output to read
                 write(parent_pipe[1], &sf1_fd, sizeof(int));
                 write(parent_pipe[1], &sf2_fd, sizeof(int));
                 write(parent_pipe[1], &sf3_fd, sizeof(int));
-                read(child_pipe[0], &resp1, sizeof(char));
-                read(child_pipe[0], &resp2, sizeof(char));
-                read(child_pipe[0], &resp3, sizeof(char));
-                printf("Responses: %c %c %c\n", resp1, resp2, resp3);
+                read(child_pipe[0], &resp[0], sizeof(char));
+                read(child_pipe[0], &resp[1], sizeof(char));
+                read(child_pipe[0], &resp[2], sizeof(char));
 
-
-                // Parent process here
-                printf("Server control port running on %d.\n"
-                       "Subflows running on ports: 1) %d\n"
-                       "                           2) %d\n"
-                       "                           3) %d\n"
-                       "Ready for connections.\n", CTL_PORT, SF1_PORT, SF2_PORT,
-                       SF3_PORT);
-
+                if (resp[0] == 'Y' && resp[1] == 'Y' && resp[2] == 'Y') {
+                        printf("Subflow connections are connected\n");
+                }
+                
                 // TODO: assumption was made that server did not have to run forever
                 // Gets data connection
-                if ((new_socket = accept(ctl_fd, (struct sockaddr *)
-                    &address, (socklen_t*)&addrlen)) < 0) {
-                        perror("accept");
-                        exit(EXIT_FAILURE);
-                }
-                valread = read(new_socket, buffer, sizeof(buffer));
+                valread = read(ctl_fd, buffer, sizeof(buffer));
                 printf("Client control connection established (%s)\n", buffer);
                 int wpid, status=0;
                 while ((wpid = wait(&status)) > 0) {}
@@ -88,10 +84,12 @@ int main(int argc, char const *argv[])
         }
 }
 
+// Note: this function blocks until a connection is established to it
 int setup_socket(int port)
 {
-        int sock_fd, enable;
+        int sock_fd, enable, incoming_conn;
         struct sockaddr_in address;
+        socklen_t addrlen = sizeof(address);
  
         // Creating socket file descriptor 
         if ((sock_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) { 
@@ -111,7 +109,7 @@ int setup_socket(int port)
         address.sin_port = htons(port);
 
         // Bind socket to port
-        if (bind(sock_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        if (bind(sock_fd, (struct sockaddr *)&address, addrlen) < 0) {
                 perror("bind");
                 return EXIT_FAILURE;
         }
@@ -122,15 +120,23 @@ int setup_socket(int port)
                 return EXIT_FAILURE;
         }
 
-        // Return the file descriptor of the newly-made socket
-        return sock_fd;
+        if ((incoming_conn = accept(sock_fd, (struct sockaddr *)
+            &address, &addrlen)) < 0) {
+                perror("accept");
+                return EXIT_FAILURE;
+        }
+        
+        // Return the file descriptor of CONNECTED file descriptor
+        return incoming_conn;
 }
 
 
 void subflow(int read_pipe[2], int write_pipe[2]) {
-        int sf_fd = 0;
+        int sf_fd = 0, incoming_conn;
         close(read_pipe[1]);
         close(write_pipe[0]);
+
+        char buffer[4];
 
         // Get the subflow connection socket file descriptor
         read(read_pipe[0], &sf_fd, sizeof(int));
@@ -138,7 +144,11 @@ void subflow(int read_pipe[2], int write_pipe[2]) {
         // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
         char yes = 'Y';
         write(write_pipe[1], &yes, sizeof(char));
-        printf("child %d got %d\n", getpid(), sf_fd);
+        
+        int valread = read(sf_fd, buffer, sizeof(buffer));
 
+        printf("child got %s\n", buffer);
+
+        close(sf_fd);
         return;
 }

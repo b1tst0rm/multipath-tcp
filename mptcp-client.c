@@ -113,13 +113,21 @@ int main (int argc, char const *argv[])
                         // Parent writes the sequence number followed by the ROUND_ROBIN_SIZE message
                         // - the child ACKs by returning the sequence number...if sequence number
                         // is wrong, then the parent throws an error and exits
-                        write(private_pipes[child_index][1], &num, sizeof(unsigned short));
-                        write(private_pipes[child_index][1], &msg, ROUND_ROBIN_SIZE);
+                        write(parent_pipes[child_index][1], &num, sizeof(unsigned short));
+                        write(parent_pipes[child_index][1], &msg, ROUND_ROBIN_SIZE);
+                        send(ctl_fd, &num, sizeof(num), 0); // send sequence number to control port on server
+                        unsigned short response = 0;
+                        read(child_pipes[child_index][0], &response, sizeof(response) ); // get confirmation back from the child process
+                        if (response != num) {
+                                perror("sending message");
+                                break;
+                        }
                         if (child_index == 2) {
                                 child_index = 0;
                         } else {
                                 child_index++;
                         }
+                        num++; // increment sequence number before sending next packet
                 }
 
                 // End the children with "STOP"
@@ -194,8 +202,10 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
 
         unsigned short child_id; /* child gets an ID that tells them what index in 
                                  array to use to read from "their" pipe */
-        int serv_fd = 0;
-        char msg_to_send[4];
+        int serv_fd = 0, sent;
+        char msg_to_send[ROUND_ROBIN_SIZE];
+        char yes = 'Y';
+        unsigned short seq_num;
 
         // First the subflow will read in its ID
         close(init_pipe[1]); // close the write end of the read pipe
@@ -207,7 +217,6 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
         read(read_pipes[child_id][0], &serv_fd, sizeof(int));
         
         // Acknowledge receipt of socket fd by writing Y to pipe (Y = yes)
-        char yes = 'Y';
         close(write_pipes[child_id][0]);
         write(write_pipes[child_id][1], &yes, sizeof(char));
 
@@ -215,8 +224,15 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
         // the server. Once the entirety of the message has been sent, the
         // parent will send "STOP" to indicate that the child should die 
         while (strcmp(msg_to_send, "STOP") != 0) {
-                read(read_pipes[child_id][0], &msg_to_send, ROUND_ROBIN_SIZE);
-                send(serv_fd, msg_to_send, strlen(msg_to_send), 0);
+                read(read_pipes[child_id][0], &seq_num, sizeof(seq_num)); // fetch sequence num
+                read(read_pipes[child_id][0], &msg_to_send, ROUND_ROBIN_SIZE); // fetch message
+                sent = send(serv_fd, msg_to_send, sizeof(msg_to_send), 0); // send message to server
+                if (sent != -1) {
+                        send(write_pipes[child_id][1], seq_num, sizeof(seq_num), 0); // return the sequence number to parent
+                } else {
+                        perror("send to server");
+                        break; 
+                }
         }
 
         return;

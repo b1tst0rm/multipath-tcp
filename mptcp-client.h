@@ -3,8 +3,6 @@
 * Header file for client app    *
 * Author: Daniel Limanowski     *
 ********************************/
-
-
 /* INCLUDES */
 #include <sys/socket.h>
 #include <stdio.h>

@@ -27,6 +27,7 @@
 /* FUNCTION PROTOTYPES */
 int create_subflow(int port);
 void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2]);
+int add_to_log(FILE *log_fp, unsigned short dsn, char msg[ROUND_ROBIN_SIZE]);
 
 
 /* CONSTANTS/GLOBALS */

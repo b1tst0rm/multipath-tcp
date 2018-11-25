@@ -18,12 +18,11 @@
 */
 int main(void)
 {
-        int ctl_fd, fork1, fork2, i, j, child_index;
+        int ctl_fd, fork1, fork2, i, child_index;
         int sf_fds[3]; /* Subflow socket file descriptor array */
         int init_pipe[2]; /* Only used to administer child IDs */
         int child_pipes[3][2], parent_pipes[3][2];
         FILE *log_fp; /* Log file for data/DSS mapping */
-        char child_ack;
         char msg[ROUND_ROBIN_SIZE];
         const unsigned short ids[3] = {0, 1, 2};
         unsigned short dsn, response;
@@ -60,7 +59,7 @@ int main(void)
 
                 /* Open and initialize log file */
                 log_fp = fopen(LOG_FILENAME, "w");
-                fprintf(log_fp, "DSS,MESSAGE\n");
+                fprintf(log_fp, "DSN,MESSAGE\n");
 
                 /* Close proper ends of pipes to communicate with children */
                 close(init_pipe[0]);
@@ -87,23 +86,6 @@ int main(void)
                         }
                 }
 
-                /* Get child process ACKs before continuing */
-                j = 1;
-                child_ack = '\0';
-                for (i = 0; i < 3; i++) {
-                        read(child_pipes[i][0], &child_ack, sizeof(child_ack));
-                        if (child_ack != 'Y') {
-                                j = -1;
-                        }
-                        child_ack = '\0'; /* Reset value */
-                }
-
-                if (j != 1) {
-                        /* A child did not acknowledge properly, quit app */
-                        perror("Child did not ack");
-                        return EXIT_FAILURE;
-                }
-
                 /* Write payload to the children round-robin style */
                 child_index = 0;
                 dsn = 0;
@@ -121,8 +103,7 @@ int main(void)
                         write(parent_pipes[child_index][1], &msg, sizeof(msg));
 
                         /* Log the mapping of DSN to bytes */
-                        fprintf(log_fp, "%d,%c%c%c%c\n", (int)dsn, 
-                                msg[0], msg[1], msg[2], msg[3]);  
+                        add_to_log(log_fp, dsn, msg);
 
                         /* Send sequence number to control port on server */
                         if (send(ctl_fd, &dsn, sizeof(dsn), 0) < 0) {
@@ -211,8 +192,8 @@ int create_subflow(int port)
                 exit(EXIT_FAILURE);
         }
 
-        /* Must have this sleep in here as a delay before continuing otherwise 
-           the socket cannot connect in time.
+        /* Must sleep here as a delay before continuing otherwise socket 
+           cannot connect in time.
         */
         sleep(0.01);
 
@@ -243,9 +224,8 @@ int create_subflow(int port)
 void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
 {
         unsigned short id; /* ID that inidicates pipes to use in arrays */
-        int serv_fd = 0, sent;
+        int serv_fd;
         char msg_to_send[ROUND_ROBIN_SIZE];
-        char yes = 'Y';
         unsigned short seq_num;
 
         /* Subflow reads in its ID */
@@ -262,13 +242,6 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
                 perror("can't get serv_fd");
                 exit(EXIT_FAILURE);
         }
- 
-        /* Acknowledge receipt of socket fd by writing 'Y' to pipe */
-        close(write_pipes[id][0]);
-        if (write(write_pipes[id][1], &yes, sizeof(yes)) < 0) {
-                perror("cannot write to parent");
-                exit(EXIT_FAILURE);
-        }
 
         /* Parent process will send DSNs followed by ROUND_ROBIN_SIZE-byte 
            chunks to send to the server. Once the entirety of the message has 
@@ -283,15 +256,35 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
                 read(read_pipes[id][0], &msg_to_send, ROUND_ROBIN_SIZE);
                 
                 /* Send message to server */
-                sent = send(serv_fd, msg_to_send, sizeof(msg_to_send), 0);
-                
-                if (sent != -1) {
+                if (send(serv_fd, msg_to_send, sizeof(msg_to_send), 0) < 0) {
+                        perror("send to server");
+                        exit(EXIT_FAILURE);
+                } else {
                         /* If the message is sent to server, return DSN to
                            parent as an acknowledgement */ 
                         write(write_pipes[id][1], &seq_num, sizeof(seq_num));
-                } else {
-                        perror("send to server");
-                        break;
                 }
+        }
+}
+
+
+/* Function: log
+ * -----------------
+ * Adds a comma-separated line to the logfile given a Data-Sequence-Number 
+ * (DSN) and a message.
+ *
+ * FILE *log_fp: Already-opened pointer to log-file
+ * unsigned short dsn: data sequence number for line in log
+ * char msg[ROUND_ROBIN_SIZE]: Message chunk associated with DSN for log line
+ *
+ * returns: 1 if line added successfully, -1 otherwise
+*/
+int add_to_log(FILE *log_fp, unsigned short dsn, char msg[ROUND_ROBIN_SIZE])
+{
+        if (fprintf(log_fp, "%d,%c%c%c%c\n", (int)dsn, msg[0], msg[1], msg[2],
+                msg[3]) < 0) {
+                return 1;
+        } else {
+                return -1;
         }
 }

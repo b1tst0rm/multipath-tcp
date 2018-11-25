@@ -1,5 +1,5 @@
 /********************************
-* MPTCP Client (mptcpclient.c)  *
+* MPTCP Client (mptcp-client.c) *
 * Client file for multipath TCP *
 * Author: Daniel Limanowski     *
 ********************************/
@@ -98,7 +98,8 @@ int main(void)
                            is wrong, then the parent throws an error and exits
                         */
                         printf("Parent sending %d to ctl and %c%c%c%c to "
-                               "child\n", dsn, msg[0], msg[1], msg[2],msg[3]);
+                               "child %d\n", dsn, msg[0], msg[1], msg[2], 
+                               msg[3], child_index);
                         write(parent_pipes[child_index][1], &dsn, sizeof(dsn));
                         write(parent_pipes[child_index][1], &msg, sizeof(msg));
 
@@ -265,6 +266,11 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
                         write(write_pipes[id][1], &seq_num, sizeof(seq_num));
                 }
         }
+
+        /* Perform cleanup by closing file descriptors */
+        close(serv_fd);
+        close(read_pipes[id][0]);
+        close(write_pipes[id][1]);
 }
 
 

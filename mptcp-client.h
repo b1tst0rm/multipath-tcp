@@ -1,5 +1,5 @@
 /********************************
-* MPTCP Client (mptcpclient.h)  *
+* MPTCP Client (mptcp-client.h) *
 * Header file for client app    *
 * Author: Daniel Limanowski     *
 ********************************/

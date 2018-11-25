@@ -3,48 +3,11 @@
 * Client file for multipath TCP *
 * Author: Daniel Limanowski     *
 ********************************/
-#include <sys/socket.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <wait.h>
+#include "mptcp-client.h"
 
 
-#define CTL_PORT 50000    // Control Port for DSN
-#define DATA_PORT_1 50001 // Data subflows 1-3
-#define DATA_PORT_2 50002
-#define DATA_PORT_3 50003
-#define SERV_IP "127.0.0.1"
-#define ROUND_ROBIN_SIZE 4
-
-
-// FUNCTION PROTOTYPES
-int create_subflow(int port);
-void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2]);
-
-
-int main (int argc, char const *argv[])
+int main()
 {
-        // TODO: make not so ugly
-        char base_data[] = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         int ctl_fd, ctl_retval, i;
         char buffer[1024] = {0};
         int init_pipe[2]; // Parent writes, child reads...only used to administer child IDs
@@ -121,12 +84,12 @@ int main (int argc, char const *argv[])
                 int child_index = 0;
                 unsigned short num = 0; // represents the DSS (overarching sequence num of transmission
                 char msg[ROUND_ROBIN_SIZE];
-                for (i = 0; i < 988; i = i + 4) {
+                for (i = 0; i < 992; i = i + 4) {
                         //strncpy(msg, &total_msg[i], ROUND_ROBIN_SIZE);
-                        msg[0] = base_data[i];
-                        msg[1] = base_data[i+1];
-                        msg[2] = base_data[i+2];
-                        msg[3] = base_data[i+3];
+                        msg[0] = payload[i];
+                        msg[1] = payload[i+1];
+                        msg[2] = payload[i+2];
+                        msg[3] = payload[i+3];
  
                         printf("Parent sending %d to ctl and %c%c%c%c to child\n", num, msg[0], msg[1], msg[2],msg[3]);
                         // Parent writes the sequence number followed by the ROUND_ROBIN_SIZE message
@@ -162,18 +125,21 @@ int main (int argc, char const *argv[])
                 }
 
                 // End the children with "STOP"
+                printf("Parent sending STOP to children\n");
                 char stop[ROUND_ROBIN_SIZE] = "STOP";
+                write(parent_pipes[0][1], &num, sizeof(unsigned short));
                 write(parent_pipes[0][1], &stop, ROUND_ROBIN_SIZE);
+                write(parent_pipes[1][1], &num, sizeof(unsigned short));
                 write(parent_pipes[1][1], &stop, ROUND_ROBIN_SIZE);
+                write(parent_pipes[2][1], &num, sizeof(unsigned short));
                 write(parent_pipes[2][1], &stop, ROUND_ROBIN_SIZE);
 
-                int wpid, status=0;
                 // Wait until all child processes finish executing
+                int wpid, status=0;
                 while ((wpid = wait(&status)) > 0) {}
                 printf("Ending client\n"); 
                 close(ctl_fd); // End control connection to server
         }
-    
         return EXIT_SUCCESS;
 }
 
@@ -267,12 +233,11 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
                 printf("Child %d is sending message: %s\n", (int)child_id, msg_to_send);
                 sent = send(serv_fd, msg_to_send, sizeof(msg_to_send), 0); // send message to server
                 if (sent != -1) {
-                        send(write_pipes[child_id][1], &seq_num, sizeof(seq_num), 0); // return the sequence number to parent
+                        write(write_pipes[child_id][1], &seq_num, sizeof(seq_num)); // return the sequence number to parent
                 } else {
                         perror("send to server");
                         break; 
                 }
         }
-
         return;
 }

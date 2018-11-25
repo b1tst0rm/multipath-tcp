@@ -6,11 +6,13 @@
 #include <string.h>
 #include <wait.h>
 
+
 #define CTL_PORT 50000
 #define SF1_PORT 50001
 #define SF2_PORT 50002
 #define SF3_PORT 50003
 #define MESSAGE_SIZE 4 /* The client's "round robin size" */
+
 
 // Function prototypes
 int setup_socket(int port);
@@ -100,6 +102,7 @@ int main(int argc, char const *argv[])
                 close(ctl_fd);
         }
 }
+
 
 // Note: this function blocks until a connection is established to it
 int setup_socket(int port)

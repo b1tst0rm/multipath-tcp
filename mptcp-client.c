@@ -3,6 +3,8 @@
 * Client file for multipath TCP *
 * Author: Daniel Limanowski     *
 ********************************/
+
+
 #include "mptcp-client.h"
 
 
@@ -13,6 +15,7 @@ int main()
         int init_pipe[2]; // Parent writes, child reads...only used to administer child IDs
         int child_pipes[3][2]; // Child writes, parent reads 
         int parent_pipes[3][2]; // Parent writes, child reads
+        FILE *log_fp = fopen(LOG_FILENAME, "w"); /* Log file for data/DSS mapping */
 
         // Create pipes for process-to-process communication
         for (i = 0; i < 3; i++) {
@@ -42,7 +45,10 @@ int main()
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
-                // parent process
+                /* Parent process */
+                /* Header for log file */
+                fprintf(log_fp, "DSS,MESSAGE\n");
+
                 char resp1, resp2, resp3;
                 close(init_pipe[0]); // close input to write
                 for (i = 0; i < 3; i++) {
@@ -97,7 +103,9 @@ int main()
                         // is wrong, then the parent throws an error and exits
                         write(parent_pipes[child_index][1], &num, sizeof(unsigned short));
                         write(parent_pipes[child_index][1], &msg, ROUND_ROBIN_SIZE);
-                        
+
+                        fprintf(log_fp, "%d,%c%c%c%c\n", (int)num, msg[0], msg[1], msg[2], msg[3]);  
+
                         // send sequence number to control port on server
                         if (send(ctl_fd, &num, sizeof(num), 0) < 0) {
                                 perror("sending over control port");

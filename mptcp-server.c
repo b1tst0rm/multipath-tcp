@@ -12,7 +12,7 @@
 #define SF2_PORT 50002
 #define SF3_PORT 50003
 #define MESSAGE_SIZE 4 /* The client's "round robin size" */
-
+#define LOG_FILENAME "log_server.txt"
 
 // Function prototypes
 int setup_socket(int port);
@@ -26,6 +26,7 @@ int main(int argc, char const *argv[])
         unsigned short seq_num = 0;
         int parent_pipe[2], child_pipe[2];
         char buffer[MESSAGE_SIZE] = {0};
+        FILE *log_fp = fopen(LOG_FILENAME, "w"); /* Log file for data/DSS mapping */
         
         // Create pipes for process-to-process communication
         if (pipe(parent_pipe) < 0) {
@@ -62,6 +63,9 @@ int main(int argc, char const *argv[])
                 perror("fork");
                 exit(EXIT_FAILURE);
         } else {
+                /* Header for log file */
+                fprintf(log_fp, "DSS,MESSAGE\n");
+                
                 char resp[3];
                 close(parent_pipe[0]); // close input to write
                 close(child_pipe[1]); // close output to read
@@ -91,8 +95,11 @@ int main(int argc, char const *argv[])
                                 perror("couldn't read sequence num");
                                 exit(EXIT_FAILURE);
                         }
-
-                        printf("Parent got SEQNUM %d MSG %s\n", seq_num, buffer);
+                        
+                        if (strcmp(buffer, "STOP") != 0) {
+                                fprintf(log_fp, "%d,%c%c%c%c\n", (int)seq_num, buffer[0], buffer[1], buffer[2], buffer[3]);
+                                printf("Parent got SEQNUM %d MSG %s\n", seq_num, buffer);
+                        }
                 }
                 
                 /* Wait for children to exit before exiting server application */

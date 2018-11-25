@@ -23,6 +23,7 @@
 #define DATA_PORT_3 50003
 #define SERV_IP "127.0.0.1"
 #define ROUND_ROBIN_SIZE 4
+#define LOG_FILENAME "log_client.txt"
 
 
 /* FUNCTION PROTOTYPES */

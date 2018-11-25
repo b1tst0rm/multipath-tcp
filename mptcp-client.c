@@ -272,25 +272,3 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
         close(read_pipes[id][0]);
         close(write_pipes[id][1]);
 }
-
-
-/* Function: log
- * -----------------
- * Adds a comma-separated line to the logfile given a Data-Sequence-Number 
- * (DSN) and a message.
- *
- * FILE *log_fp: Already-opened pointer to log-file
- * unsigned short dsn: data sequence number for line in log
- * char msg[ROUND_ROBIN_SIZE]: Message chunk associated with DSN for log line
- *
- * returns: 1 if line added successfully, -1 otherwise
-*/
-int add_to_log(FILE *log_fp, unsigned short dsn, char msg[ROUND_ROBIN_SIZE])
-{
-        if (fprintf(log_fp, "%d,%c%c%c%c\n", (int)dsn, msg[0], msg[1], msg[2],
-                msg[3]) < 0) {
-                return 1;
-        } else {
-                return -1;
-        }
-}

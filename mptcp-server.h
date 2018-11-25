@@ -4,21 +4,10 @@
 * Author: Daniel Limanowski     *
 ********************************/
 /* INCLUDES */
-#include <unistd.h>
-#include <stdio.h>
-#include <sys/socket.h>
-#include <stdlib.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <wait.h>
+#include "common.h"
 
 
 /* DEFINES */
-#define CTL_PORT 50000
-#define SF1_PORT 50001
-#define SF2_PORT 50002
-#define SF3_PORT 50003
-#define MESSAGE_SIZE 4 /* The client's "round robin size" */
 #define LOG_FILENAME "log_server.txt"
 
 

@@ -23,7 +23,7 @@ int main(void)
         int sf_fds[3]; /* Subflow socket file descriptor array */
         unsigned short seq_num;
         int parent_pipe[2], child_pipe[2];
-        char buffer[MESSAGE_SIZE];
+        char buffer[ROUND_ROBIN_SIZE];
         FILE *log_fp; /* Log file for data/DSS mapping */
         
         /* Initialize pipes for process-to-process communication */
@@ -40,13 +40,13 @@ int main(void)
                "Subflows running on ports: 1) %d\n"
                "                           2) %d\n"
                "                           3) %d\n"
-               "Ready for connections.\n", CTL_PORT, SF1_PORT, SF2_PORT,
-               SF3_PORT);
+               "Ready for connections.\n", CTL_PORT, DATA_PORT_1, DATA_PORT_2,
+               DATA_PORT_3);
  
         ctl_fd = setup_socket(CTL_PORT);
-        sf_fds[0] = setup_socket(SF1_PORT);
-        sf_fds[1] = setup_socket(SF2_PORT);
-        sf_fds[2] = setup_socket(SF3_PORT);
+        sf_fds[0] = setup_socket(DATA_PORT_1);
+        sf_fds[1] = setup_socket(DATA_PORT_2);
+        sf_fds[2] = setup_socket(DATA_PORT_3);
         
         printf("All 4 connections made successfully from client.\n");
 
@@ -182,7 +182,7 @@ int setup_socket(int port)
 void subflow(int read_pipe[2], int write_pipe[2])
 {
         int sf_fd, incoming_conn;
-        char buffer[MESSAGE_SIZE];
+        char buffer[ROUND_ROBIN_SIZE];
         
         close(read_pipe[1]);
         close(write_pipe[0]);

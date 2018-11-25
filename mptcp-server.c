@@ -19,7 +19,7 @@ int setup_socket(int port);
 void subflow(int read_pipe[2], int write_pipe[2]);
 
 
-int main(int argc, char const *argv[])
+int main(void)
 {
         int ctl_fd, new_socket, valread, enable, 
             sf1_fd, sf2_fd, sf3_fd, fork1, fork2;

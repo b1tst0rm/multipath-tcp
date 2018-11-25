@@ -8,7 +8,7 @@
 #include "mptcp-client.h"
 
 
-int main()
+int main(void)
 {
         int ctl_fd, ctl_retval, i;
         char buffer[1024] = {0};
@@ -197,37 +197,45 @@ int create_subflow(int port)
 }
 
 
-// Child processes call this to execute MP subflow code
-/* TODO: Cleanup...thought: have a shared read_pipe and an array of child-process-specific
-read_pipes. The children get their "ID" from the shared pipe and then access 
-their index in the array of read_pipes */
+/* Function: subflow
+ * -----------------
+ * Child processes (the subflows) call this function to receive data from
+ * parent process and send over to server.
+ *
+ * int init_pipe[2]: Initialization pipe used to get a child's "ID" so it
+ *     knows which of the read/write pipes to use
+ * int write_pipes[3][2]: Array (one for each subflow) of pipes for child 
+ *     to write to (writes back the received DSS)
+ * int read_pipes[3][2]: Array of pipes for child to read from (data)
+ *
+ * returns: void (nothing)
+*/
 void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
 {
-        unsigned short child_id; /* child gets an ID that tells them what index in 
-                                 array to use to read from "their" pipe */
+        unsigned short id; /* ID that inidicates pipes to use in arrays */
         int serv_fd = 0, sent;
         char msg_to_send[ROUND_ROBIN_SIZE];
         char yes = 'Y';
         unsigned short seq_num;
 
-        // First the subflow will read in its ID
-        close(init_pipe[1]); // close the write end of the read pipe
-        if (read(init_pipe[0], &child_id, sizeof(unsigned short)) < 0) {
+        /* Subflow reads in its ID */
+        close(init_pipe[1]); /* Close write end of read pipe */
+        if (read(init_pipe[0], &id, sizeof(id)) < 0) {
                 perror("can't get child_id");
                 exit(EXIT_FAILURE);
         }
-        close(init_pipe[0]); // close out the init pipe as subflow will no longer use it
+        close(init_pipe[0]); /* close out init pipe as no longer needed */
        
         // Next, subflow accesses its private pipe and gets its socket descriptor
-        close(read_pipes[child_id][1]); // close the write end of the read pipe
-        if (read(read_pipes[child_id][0], &serv_fd, sizeof(int)) < 0) {
+        close(read_pipes[id][1]); // close the write end of the read pipe
+        if (read(read_pipes[id][0], &serv_fd, sizeof(serv_fd)) < 0) {
                 perror("can't get serv_fd");
                 exit(EXIT_FAILURE);
         }
         
         // acknowledge receipt of socket fd by writing y to pipe (y = yes)
-        close(write_pipes[child_id][0]);
-        if (write(write_pipes[child_id][1], &yes, sizeof(char)) < 0) {
+        close(write_pipes[id][0]);
+        if (write(write_pipes[id][1], &yes, sizeof(yes)) < 0) {
                 perror("cannot write to parent");
                 exit(EXIT_FAILURE);
         }
@@ -236,16 +244,15 @@ void subflow(int init_pipe[2], int write_pipes[3][2], int read_pipes[3][2])
         // the server. Once the entirety of the message has been sent, the
         // parent will send "STOP" to indicate that the child should die 
         while (strcmp(msg_to_send, "STOP") != 0) {
-                read(read_pipes[child_id][0], &seq_num, sizeof(seq_num)); // fetch sequence num
-                read(read_pipes[child_id][0], &msg_to_send, ROUND_ROBIN_SIZE); // fetch message
-                printf("Child %d is sending message: %s\n", (int)child_id, msg_to_send);
+                read(read_pipes[id][0], &seq_num, sizeof(seq_num)); // fetch sequence num
+                read(read_pipes[id][0], &msg_to_send, ROUND_ROBIN_SIZE); // fetch message
+                printf("Child %d is sending message: %s\n", (int)id, msg_to_send);
                 sent = send(serv_fd, msg_to_send, sizeof(msg_to_send), 0); // send message to server
                 if (sent != -1) {
-                        write(write_pipes[child_id][1], &seq_num, sizeof(seq_num)); // return the sequence number to parent
+                        write(write_pipes[id][1], &seq_num, sizeof(seq_num)); // return the sequence number to parent
                 } else {
                         perror("send to server");
                         break; 
                 }
         }
-        return;
 }

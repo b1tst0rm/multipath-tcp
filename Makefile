@@ -9,4 +9,4 @@ client:
 	gcc -o client mptcp-client.c
 
 clean:
-	$(RM) server client
+	$(RM) server client log_server.txt log_client.txt

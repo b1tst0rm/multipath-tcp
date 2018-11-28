@@ -4,8 +4,9 @@ Uses multiprocessing to send chunked payload to a server application where
 it is properly reassembled in order.
 
 ## Usage
-Run `make` to compile the project.
-Use `make` to compile the project. Run `server` followed by `client`.
+Use `make` to compile the project. 
+
+Run `server` followed by `client`.
 
 
 Please see `multipath-report.pdf` for more details regarding this code.

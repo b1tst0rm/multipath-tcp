@@ -9,4 +9,4 @@ Use `make` to compile the project.
 Run `server` followed by `client`.
 
 
-Please see `multipath-report.pdf` for more details regarding this code.
+Please see `multipath_report.pdf` for more details regarding this code.
